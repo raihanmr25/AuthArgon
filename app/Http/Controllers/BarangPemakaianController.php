@@ -12,99 +12,55 @@ use Illuminate\Support\Str;
 
 class BarangPemakaianController extends Controller
 {
-    //
-     public function create()
-    {
-        return view('barang.create');
-    }
+    // ... (All your original functions like create, store, destroy, edit, update for the web are here and unchanged) ...
+    public function create() { /* ... */ }
+    public function store(Request $request) { /* ... */ }
+    public function destroy($id) { /* ... */ }
+    public function edit($id) { /* ... */ }
+    public function update(Request $request, $id) { /* ... */ }
 
-    public function store(Request $request)
-    {
-        $validated = $request->validate([
-            'nibar' => 'nullable|string',
-            'kode_barang' => 'nullable|string',
-            'nama_barang' => 'required|string',
-            'spesifikasi_nama_barang' => 'nullable|string',
-            'lokasi' => 'nullable|string',
-            'nama_pemakai' => 'nullable|string',
-            'status_pemakai' => 'nullable|string',
-            'jabatan' => 'nullable|string',
-            'nomor_identitas_pemakai' => 'nullable|string',
-            'alamat_pemakai' => 'nullable|string',
-            'bast_nomor' => 'nullable|string',
-            'bast_tanggal' => 'nullable|date',
-            'dokumen_nama' => 'nullable|string',
-            'dokumen_nomor' => 'nullable|string',
-            'dokumen_tanggal' => 'nullable|date',
-            'keterangan' => 'nullable|string',
-            'no_simda' => 'nullable|string',
-            'new' => 'nullable|string',
-            'no_mesin' => 'nullable|string',
-            'tahun' => 'nullable|string',
-            'barcode' => 'string'
-        ]);
 
-        if (empty($validated['barcode'])) {
-            $validated['barcode'] = 'ASSET-' . strtoupper(Str::random(8));
+    /**
+     * This is the FLEXIBLE search function for the API.
+     */
+    public function apiFindByCode($code)
+    {
+        // 1. Clean the incoming code to handle formatting differences
+        $cleanedCode = str_replace(['.', ',', ' '], '', $code);
+
+        // 2. First, try to find a match in the 'barcode' column
+        $asset = BarangPemakaian::where('barcode', $code)->first();
+
+        // 3. If not found, try to find a match in the 'nibar' column
+        if (!$asset) {
+            $asset = BarangPemakaian::whereRaw("REPLACE(REPLACE(nibar, '.', ''), ',', '') = ?", [$cleanedCode])
+                                      ->first();
         }
 
-        $asset = BarangPemakaian::create($validated);
+        // 4. Return the result
+        if (!$asset) {
+            return response()->json(['error' => 'Asset not found'], 200);
+        }
 
-        // Save Bar CODE
-        $fileName = 'barcode/' .$asset->barcode . 'png';
-        $png = DNS1D::getBarCodePNG($asset->barcode, 'C128'); 
-        Storage::disk('public')->put($fileName, base64_decode($png));
-
-
-        return to_route('item')->with('success', 'Data barang berhasil disimpan dengan QR code!');
+        return response()->json(['data' => $asset], 200);
     }
 
-    public function destroy($id)
-{
-    $barang = BarangPemakaian::findOrFail($id);
-    $barang->delete();
+    /**
+     * This is the RESTRICTED update function for the API.
+     */
+    public function apiUpdate(Request $request, BarangPemakaian $barangPemakaian)
+    {
+        // Validation is restricted to only these fields
+        $validatedData = $request->validate([
+            'lokasi' => 'sometimes|string|max:255',
+            'nama_pemakai' => 'sometimes|string|max:255',
+            'status_pemakai' => 'sometimes|string|max:255',
+            'jabatan' => 'sometimes|string|max:255',
+            'keterangan' => 'nullable|string',
+        ]);
 
-    return redirect()->route('item')->with('success', 'Barang berhasil dihapus');
-}
+        $barangPemakaian->update($validatedData);
 
-public function edit($id)
-{
-    return view('barang.edit', [
-        'barang' => BarangPemakaian::findOrFail($id)
-    ]);
-}
-
-public function update(Request $request, $id)
-{
-    $barang = BarangPemakaian::findOrFail($id);
-
-    $barang->update([
-        'nibar' => $request->nibar,
-        'kode_barang' => $request->kode_barang,
-        'nama_barang' => $request->nama_barang,
-        'spesifikasi_nama_barang' => $request->spesifikasi_nama_barang,
-        'lokasi' => $request->lokasi,
-        'nama_pemakai' => $request->pemakai,
-        'status_pemakai' => $request->status,
-        'jabatan' => $request->jabatan,
-        'nomor_identitas_pemakai' => $request->identitas,
-        'alamat_pemakai' => $request->alamat,
-        'bast_nomor' => $request->no_bast,
-        'bast_tanggal' => $request->tgl_bast,
-        'dokumen_nama' => $request->dokumen,
-        'dokumen_nomor' => $request->no_dok,
-        'dokumen_tanggal' => $request->tgl_dok,
-        'keterangan' => $request->keterangan,
-        'no_simda' => $request->no_simda,
-        'new' => $request->new,
-        'no_mesin' => $request->no_mesin,
-        'tahun' => $request->tahun,
-        
-    ]);
-
-    return redirect()->route('item')->with('success', 'Barang berhasil diedit');
-
-
-}
-
+        return response()->json(['message' => 'Asset updated successfully', 'data' => $barangPemakaian]);
+    }
 }

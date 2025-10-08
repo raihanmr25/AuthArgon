@@ -1,106 +1,68 @@
 <?php
 
 namespace App\Http\Controllers;
-use Carbon\Carbon;
+use carbon\Carbon;
 
-use App\Models\User;
+use App\Http\Requests\Auth\LoginRequest;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Validator;
-use App\Models\BarangPemakaian;
-
+use Illuminate\View\View;
 
 class AuthController extends Controller
 {
-    
-   public function register(Request $request)
-{
-    // Validasi data registrasi
-    $validator = Validator::make($request->all(), [
-        'name' => 'required|string|max:255',
-        'email' => 'required|email|unique:users,email',
-        'password' => [
-            'required',
-            'string',
-            'min:8',
-            'regex:/^[A-Z]/', // Password harus diawali huruf kapital
-            'regex:/[!@#$%^&*(),.?":{}|<>]/', // Harus mengandung karakter spesial
-            'confirmed'
-        ],
-    ], [
-        'password.regex' => 'Password harus diawali huruf besar dan mengandung karakter spesial.'
-    ]);
-
-    if ($validator->fails()) {
-        return response()->json(['errors' => $validator->errors()], 422);
+    /**
+     * Display the login view.
+     */
+    public function create(): View
+    {
+        return view('Auth.login');
     }
 
-    // Simpan user baru
-    $user = User::create([
-        'name' => $request->name,
-        'email' => $request->email,
-        'password' => Hash::make($request->password),
-    ]);
-
-    return view('auth.login');
-}
-    public function login(Request $request)
+    /**
+     * Handle an incoming authentication request for the web.
+     */
+    public function store(LoginRequest $request): RedirectResponse
     {
+        $request->authenticate();
 
-        $jumlah = BarangPemakaian::count();
-        $todayItems = BarangPemakaian::whereDate('created_at', Carbon::today())->take(5)->get();
-        // $notifications = BarangPemakaian::latest()->take(5)->get(); // ambil 5 notifikasi terbaru
-        // $deletedItems = BarangPemakaian::onlyTrashed()->whereDate('deleted_at', $today)->get();
-        $notifications = BarangPemakaian::latest()->take(5)->get();
+        $request->session()->regenerate();
 
-        // Validate login data
-        $validator = Validator::make($request->all(), [
+        return redirect()->intended(route('dashboard', absolute: false));
+    }
+
+    /**
+     * Destroy an authenticated session for the web.
+     */
+    public function destroy(Request $request): RedirectResponse
+    {
+        Auth::guard('web')->logout();
+
+        $request->session()->invalidate();
+
+        $request->session()->regenerateToken();
+
+        return redirect('/');
+    }
+
+    /**
+     * Handle an incoming authentication request from the API (mobile app).
+     */
+    public function apiLogin(Request $request)
+    {
+        $credentials = $request->validate([
             'email' => 'required|email',
-            'password' => 'required|string',
+            'password' => 'required',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        // Attempt to login using email and password
-        if (Auth::attempt(['email' => $request->email, 'password' => $request->password])) {
+        if (Auth::attempt($credentials)) {
             $user = Auth::user();
-
-        return view('dashboard', compact('user', 'jumlah', 'todayItems', 'notifications'));
-
+            // Create a token for the mobile app
+            $token = $user->createToken('invenscan-auth-token')->plainTextToken;
+            // Return the token and user info as JSON
+            return response()->json(['token' => $token, 'user' => $user]);
         }
 
-        return response()->json(['error' => 'Invalid credentials'], 401);
-        
+        return response()->json(['message' => 'Invalid credentials'], 401);
     }
-
-    public function logout(Request $request)
-    {
-
-        Auth::logout();
-
-        return view('auth.login');
-
-    }
-
-       public function dashboard()
-    {
-        // Contoh data yang bisa dikirim ke view dashboard (jika diperlukan)
-        $items = BarangPemakaian::all();
-        $jumlah = BarangPemakaian::count();
-        $todayItems = BarangPemakaian::whereDate('created_at', Carbon::today())->get();
-        
-        // return view('dashboard', compact('items'));
-
-        return view('dashboard', [
-
-            'items'         => $items,
-            'jumlah'        => $jumlah,
-            'todayItems'   => $todayItems,
-            
-        ]);
-    }
-
 }

@@ -19,7 +19,7 @@ Route::get(
     return view('auth.login');
 })->name('login');
 
-Route::post('login', [AuthController::class, 'login']);
+Route::post('login', [AuthController::class, 'store'])->name('login');
 
 Route::get('/', function () {
     return view('landing');
